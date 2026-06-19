@@ -1,0 +1,27 @@
+services: 
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgresql://richman_elikor:mysecretpassword@db:5432/product_db?schema=public
+
+
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: richman_elikor
+      POSTGRES_PASSWORD: "mysecretpassword"
+      POSTGRESS_DB: product_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
