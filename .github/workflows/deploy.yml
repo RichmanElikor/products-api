@@ -1,0 +1,78 @@
+# The name of this workflow — appears as the label in your GitHub Actions tab
+name: Deploy to EC2
+
+# "on" defines what event triggers this workflow to run
+on:
+  # trigger specifically when code is pushed
+  push:
+    # only trigger when the push is to the main branch
+    # pushing to any other branch like "feature" or "dev" will NOT trigger this
+    branches:
+      - main
+
+# jobs defines the actual work to be done
+jobs:
+  # "deploy" is the name you give this job — you can name it anything
+  deploy:
+    # GitHub will spin up a fresh temporary Ubuntu machine to run this job
+    # this is NOT your EC2 server — it is GitHub's own temporary worker machine
+    # it exists only for the duration of this job, then gets deleted
+    runs-on: ubuntu-latest
+
+    # steps are the individual actions that run in sequence
+    # if any step fails, all remaining steps are skipped
+    steps:
+      # a human readable name for this step — shows up in the Actions log
+      - name: Deploy to server
+
+        # "uses" references a pre-built community action
+        # appleboy/ssh-action is a popular action specifically designed
+        # to SSH into a remote server and run commands on it
+        # @v1.0.0 pins it to a specific stable version so it never changes unexpectedly
+        uses: appleboy/ssh-action@v1.0.0
+
+        # "with" passes configuration values into the action
+        with:
+          # the IP address of your EC2 server
+          # ${{ secrets.EC2_HOST }} reads the value you saved in GitHub secrets
+          # GitHub never exposes this value in logs — it stays encrypted
+          host: ${{ secrets.EC2_HOST }}
+
+          # the username to log into your server with
+          # for Ubuntu EC2 instances this is always "ubuntu"
+          # ${{ secrets.EC2_USERNAME }} reads that value from your GitHub secrets
+          username: ${{ secrets.EC2_USERNAME }}
+
+          # your private SSH key that gives access to your EC2 server
+          # this is the private key content you saved as EC2_SSH_KEY in GitHub secrets
+          # GitHub uses this to authenticate the SSH connection to your server
+          # without this, the connection would be rejected with "permission denied"
+          key: ${{ secrets.EC2_SSH_KEY }}
+
+          # "script" contains the actual commands that run on your EC2 server
+          # the | character means everything indented below it is a multi-line string
+          # these commands run in sequence on your live server, not on GitHub's machine
+          script: |
+            # navigate into your project folder on the EC2 server
+            # this is where your docker-compose.yml and all your code lives
+            cd ~/products-api
+
+            # pull the latest code from your GitHub repository main branch
+            # this downloads whatever you just pushed to GitHub onto your server
+            git pull origin main
+
+            # stop all currently running Docker containers
+            # this gracefully shuts down your app and database containers
+            docker compose down
+
+            # rebuild your Docker image with the new code and start all containers
+            # --build forces Docker to rebuild the image even if one already exists
+            # -d runs containers in detached mode so they keep running in the background
+            # after this command your updated app is live
+            docker compose up --build -d
+
+            # run any pending database migrations against your containerized database
+            # "migrate deploy" is the production safe version of migrate dev
+            # it only applies migrations that have not been applied yet
+            # -T disables pseudo-terminal allocation which is required for non-interactive use
+            docker compose exec -T app npx prisma migrate deploy
